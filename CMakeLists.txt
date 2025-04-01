@@ -30,6 +30,9 @@ set(ignoreMe "${VLLM_PYTHON_PATH}")
 #
 set(PYTHON_SUPPORTED_VERSIONS "3.9" "3.10" "3.11" "3.12")
 
+set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-12.8")
+set(CUDA_INCLUDE_DIRS "${CUDA_TOOLKIT_ROOT_DIR}/include")
+
 # Supported NVIDIA architectures.
 set(CUDA_SUPPORTED_ARCHS "7.0;7.2;7.5;8.0;8.6;8.7;8.9;9.0;10.0;10.1;12.0")
 

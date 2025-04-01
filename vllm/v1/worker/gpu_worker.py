@@ -53,6 +53,36 @@ class Worker(WorkerBase):
             from vllm.utils import init_cached_hf_modules
             init_cached_hf_modules()
 
+        def trace_handler(prof):
+            import datetime
+            import subprocess
+            import getpass
+            
+            username = getpass.getuser()
+            timestamp = int(datetime.datetime.now().timestamp())
+            trace_path = f"gpu_traces/trace_{timestamp}.json"
+            manifold_path = f"gpu_traces/tree/{username}/vllm/trace_{timestamp}.json"
+            
+            prof.export_chrome_trace(trace_path)
+            
+            # Run the manifold upload command
+            subprocess.run(
+                ["manifold", "mkdir", f"gpu_traces/tree/{username}/vllm"],
+                capture_output=True,
+                text=True,
+            )
+            result = subprocess.run(
+                ["manifold", "put", "--threads", "20", trace_path, manifold_path],
+                capture_output=True,
+                text=True
+            )
+            
+            print(f"GPU trace local file: {trace_path}")
+            if result.returncode == 0:
+                print(f"GPU trace URL (requires VPN): https://interncache-all.fbcdn.net/manifold/perfetto-artifacts/tree/ui/index.html#!/?url=https://interncache-all.fbcdn.net/manifold/gpu_traces/tree/{username}/vllm/trace_{timestamp}.json")
+            else:
+                print(f"Failed to upload trace: {result.stderr}")
+
         # Torch profiler. Enabled and configured through env vars:
         # VLLM_TORCH_PROFILER_DIR=/path/to/save/trace
         if envs.VLLM_TORCH_PROFILER_DIR:
@@ -65,8 +95,8 @@ class Worker(WorkerBase):
                     torch.profiler.ProfilerActivity.CUDA,
                 ],
                 with_stack=True,
-                on_trace_ready=torch.profiler.tensorboard_trace_handler(
-                    torch_profiler_trace_dir, use_gzip=True))
+                on_trace_ready=trace_handler,
+            )
         else:
             self.profiler = None
 
