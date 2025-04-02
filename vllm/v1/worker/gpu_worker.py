@@ -24,6 +24,7 @@ from vllm.v1.kv_cache_interface import KVCacheConfig, KVCacheSpec
 from vllm.v1.outputs import ModelRunnerOutput
 from vllm.v1.worker.gpu_model_runner import GPUModelRunner
 from vllm.v1.worker.worker_base import WorkerBase
+from vllm.flop_counter import FlopCounterMode
 
 logger = init_logger(__name__)
 
@@ -94,7 +95,8 @@ class Worker(WorkerBase):
                     torch.profiler.ProfilerActivity.CPU,
                     torch.profiler.ProfilerActivity.CUDA,
                 ],
-                with_stack=True,
+                with_stack=False,
+                record_shapes=True,
                 on_trace_ready=trace_handler,
             )
         else:
@@ -269,7 +271,8 @@ class Worker(WorkerBase):
         self,
         scheduler_output: "SchedulerOutput",
     ) -> Optional[ModelRunnerOutput]:
-        output = self.model_runner.execute_model(scheduler_output)
+        with FlopCounterMode(display=True, show_per_module=True, depth=3) as mode:
+            output = self.model_runner.execute_model(scheduler_output)
         return output if self.is_driver_worker else None
 
     def profile(self, is_start: bool = True):

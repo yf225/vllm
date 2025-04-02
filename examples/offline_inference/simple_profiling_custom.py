@@ -16,9 +16,9 @@ os.environ["VLLM_TORCH_PROFILER_DIR"] = "./gpu_traces"
 # Sample prompts.
 prompts = [
     "Hello, my name is",
-    "The president of the United States is",
-    "The capital of France is",
-    "The future of AI is",
+    # "The president of the United States is",
+    # "The capital of France is",
+    # "The future of AI is",
 ]
 # Create a sampling params object.
 sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
@@ -26,7 +26,7 @@ sampling_params = SamplingParams(temperature=0.8, top_p=0.95)
 if __name__ == "__main__":
 
     # Create an LLM.
-    llm = LLM(model=os.environ["MODEL_NAME"], tensor_parallel_size=1)
+    llm = LLM(model=os.environ["MODEL_NAME"], tensor_parallel_size=1, compilation_config=0)
 
     llm.start_profile()
 
