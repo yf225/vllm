@@ -87,16 +87,17 @@ class Worker(WorkerBase):
         # Torch profiler. Enabled and configured through env vars:
         # VLLM_TORCH_PROFILER_DIR=/path/to/save/trace
         if envs.VLLM_TORCH_PROFILER_DIR:
-            torch_profiler_trace_dir = envs.VLLM_TORCH_PROFILER_DIR
-            logger.info("Profiling enabled. Traces will be saved to: %s",
-                        torch_profiler_trace_dir)
+            # torch_profiler_trace_dir = envs.VLLM_TORCH_PROFILER_DIR
+            # logger.info("Profiling enabled. Traces will be saved to: %s",
+            #             torch_profiler_trace_dir)
+            logger.info("Profiling enabled.")
             self.profiler = torch.profiler.profile(
                 activities=[
                     torch.profiler.ProfilerActivity.CPU,
                     torch.profiler.ProfilerActivity.CUDA,
                 ],
-                with_stack=False,
-                record_shapes=True,
+                # with_stack=True,
+                # record_shapes=True,
                 on_trace_ready=trace_handler,
             )
         else:
@@ -271,7 +272,7 @@ class Worker(WorkerBase):
         self,
         scheduler_output: "SchedulerOutput",
     ) -> Optional[ModelRunnerOutput]:
-        with FlopCounterMode(display=True, show_per_module=True, depth=3) as mode:
+        with FlopCounterMode(display=True, show_per_module=False) as mode:  # yf225 DEBUG
             output = self.model_runner.execute_model(scheduler_output)
         return output if self.is_driver_worker else None
 

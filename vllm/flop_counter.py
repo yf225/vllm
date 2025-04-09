@@ -29,7 +29,10 @@ def shape_wrapper(f):
     @wraps(f)
     def nf(*args, out_val=None, **kwargs):
         args, kwargs, out_shape = tree_map(get_shape, (args, kwargs, out_val))
-        return f(*args, out_shape=out_shape, **kwargs)
+        try:
+            return f(*args, out_shape=out_shape, **kwargs)
+        except:
+            return f(*args, **kwargs)  # for vLLM cutlass_scaled_mm
     return nf
 
 def register_flop_formula(targets, get_raw=False) -> Callable[[Callable[_P, _T]], Callable[_P, _T]]:
@@ -61,7 +64,7 @@ def mm_flop(a_shape, b_shape, *args, out_shape=None, **kwargs) -> int:
     # Inputs contains the shapes of two matrices.
     m, k = a_shape
     k2, n = b_shape
-    assert k == k2
+    assert k == k2, f"Shape mismatch in mm_flop: {a_shape} vs {b_shape}, specifically {k} vs {k2}"
     # NB(chilli): Should be 2 * k - 1 technically for FLOPs.
     return m * n * 2 * k
 
@@ -105,6 +108,30 @@ def _scaled_mm_flop(
 ) -> int:
     """Count flops for _scaled_mm."""
     return mm_flop(a_shape, b_shape)
+
+
+"""
+# vllm/_custom_ops.py
+
+torch.ops._C.cutlass_scaled_mm(out, a, b, scale_a, scale_b, bias)
+"""
+cutlass_scaled_mm_flop = None
+try:
+    from vllm import _custom_ops
+    @register_flop_formula(torch.ops._C.cutlass_scaled_mm)
+    def cutlass_scaled_mm_flop(
+        out_shape,
+        a_shape,
+        b_shape,
+        scale_a_shape,
+        scale_b_shape,
+        bias_shape,
+    ):
+        """Count flops for cutlass_scaled_mm."""
+        return _scaled_mm_flop(a_shape, b_shape, scale_a_shape, scale_b_shape, bias_shape=bias_shape, out_shape=out_shape)
+except ImportError:
+    print(f"Failed to import vllm._custom_ops")
+    pass
 
 
 def conv_flop_count(
@@ -559,6 +586,7 @@ flop_registry = {
     aten.bmm: bmm_flop,
     aten.baddbmm: baddbmm_flop,
     aten._scaled_mm: _scaled_mm_flop,
+    torch.ops._C.cutlass_scaled_mm: cutlass_scaled_mm_flop,
     aten.convolution: conv_flop,
     aten._convolution: conv_flop,
     aten.convolution_backward: conv_backward_flop,
@@ -791,18 +819,25 @@ class FlopCounterMode:
                                 tuple(sub_arg.stride()),
                                 str(sub_arg.dtype)
                             ))
+                        else:
+                            sub_shapes_strides_dtypes.append(sub_arg)
                     if sub_shapes_strides_dtypes:
                         shapes_strides_and_dtypes.append(tuple(sub_shapes_strides_dtypes))
+                else:
+                    shapes_strides_and_dtypes.append(arg)
 
             # Convert shapes, strides and dtypes list to string for dictionary key
             # Format: shape[strides]dtype
             def format_tensor_info(info):
-                if isinstance(info[0], tuple) and len(info[0]) > 0 and isinstance(info[0][0], tuple):
-                    # Handle nested case (list/tuple of tensors)
-                    return str([f"{s}{st}:{d}" for s, st, d in info[0]])
+                if isinstance(info, tuple):
+                    if isinstance(info[0], tuple) and len(info[0]) > 0 and isinstance(info[0][0], tuple):
+                        # Handle nested case (list/tuple of tensors)
+                        return str([f"{s}{st}:{d}" for s, st, d in info[0]])
+                    else:
+                        shape, stride, dtype = info
+                        return f"{shape}{stride}:{dtype}"
                 else:
-                    shape, stride, dtype = info
-                    return f"{shape}{stride}:{dtype}"
+                    return str(info)
                 
             shape_stride_dtype_key = str([format_tensor_info(info) for info in shapes_strides_and_dtypes])
             

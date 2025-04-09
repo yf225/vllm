@@ -61,6 +61,7 @@ def run_vllm(
                 top_p=1.0,
                 ignore_eos=True,
                 max_tokens=request.expected_output_len,
+                # max_tokens=8,
                 detokenize=not disable_detokenize,
             ))
     lora_requests: Optional[list[LoRARequest]] = None
@@ -71,12 +72,14 @@ def run_vllm(
 
     outputs = None
     if not use_beam_search:
+        # llm.start_profile()  # yf225 DEBUG
         start = time.perf_counter()
         outputs = llm.generate(prompts,
                                sampling_params,
                                lora_request=lora_requests,
                                use_tqdm=True)
         end = time.perf_counter()
+        # llm.stop_profile()
     else:
         assert lora_requests is None, "BeamSearch API does not support LoRA"
         prompts = [request.prompt for request in requests]
